@@ -89,7 +89,6 @@
             <div class="bg-gray-800 rounded-lg shadow-md flex flex-col h-80">
                 <div class="flex justify-between items-center p-3 bg-gray-700 rounded-t-lg">
                     <h2 class="text-base font-bold">Our Fleet</h2>
-                    <span class="text-xs font-mono bg-gray-600 px-2 py-1 rounded">Capacity: <span id="fleet-capacity">0 / 0</span></span>
                 </div>
                 <div id="unit-list" class="p-2 space-y-2 overflow-y-auto custom-scrollbar flex-1"></div>
             </div>
@@ -101,13 +100,12 @@
                 <div id="map-overlay" class="map-overlay"></div>
             </div>
             <div class="bg-gray-800 rounded-lg shadow-md p-3">
-                <h3 class="text-base font-bold mb-3 text-center">Fleet & Station Command</h3>
+                <h3 class="text-base font-bold mb-3 text-center">Fleet Command</h3>
                 <div class="flex justify-center items-center gap-2 sm:gap-4 flex-wrap">
                     <button id="buy-ambulance-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">Add Amb (1000)</button>
                     <button id="buy-rrv-btn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">Add RRV (750)</button>
                     <button id="buy-pts-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">Add PTS (500)</button>
                     <button id="buy-helicopter-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">Add Heli (3000)</button>
-                    <button id="build-station-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">Build Station (2000)</button>
                 </div>
             </div>
         </div>
@@ -168,11 +166,10 @@
     const GAME_TICK_SPEED = 500;
     const CALL_INTERVAL = 18000;
     const WEATHER_CHANGE_INTERVAL = 60000;
-    const UNIT_COST = { AMBULANCE: 1000, RRV: 750, PATIENT_TRANSFER: 500, HELICOPTER: 3000, STATION: 2000 };
+    const UNIT_COST = { AMBULANCE: 1000, RRV: 750, PATIENT_TRANSFER: 500, HELICOPTER: 3000 };
     const FATIGUE_PER_JOB = 20;
     const FATIGUE_RECOVERY_RATE = 2;
     const PERFORMANCE_PENALTY_TIRED = 1.5;
-    const SLOTS_PER_STATION = 4;
 
     // --- DOM ELEMENTS ---
     const elements = {
@@ -189,7 +186,6 @@
         buyRrvBtn: document.getElementById('buy-rrv-btn'),
         buyPtsBtn: document.getElementById('buy-pts-btn'),
         buyHelicopterBtn: document.getElementById('buy-helicopter-btn'),
-        buildStationBtn: document.getElementById('build-station-btn'),
         dispatchModal: {
             modal: document.getElementById('dispatch-modal'),
             title: document.getElementById('dispatch-modal-title'),
@@ -204,7 +200,6 @@
         rrvCount: document.getElementById('rrv-count'),
         ptsCount: document.getElementById('pts-count'),
         helicopterCount: document.getElementById('helicopter-count'),
-        fleetCapacity: document.getElementById('fleet-capacity'),
     };
 
     // --- GAME STATE ---
@@ -218,7 +213,6 @@
         hospitals: [],
         stations: [],
         landmarks: [],
-        maxFleetSize: 0,
         nextIds: { incident: 1, unit: 1 },
         gameRunning: false,
         activeDispatch: { incidentId: null, assignments: {} },
@@ -333,7 +327,7 @@
     function heuristic(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
 
     // --- MAP GENERATION ---
-    function generateMap(){let t=Array(MAP_HEIGHT).fill(0).map(()=>Array(MAP_WIDTH).fill(TILE_TYPES.BUILDING));for(let e=0;e<4;e++){let n=Math.floor(MAP_HEIGHT/5*(e+1));for(let e=0;e<MAP_WIDTH;e++)t[n][e]=TILE_TYPES.ROAD}for(let e=0;e<6;e++){let n=Math.floor(MAP_WIDTH/7*(e+1));for(let e=0;e<MAP_HEIGHT;e++)t[e][n]=TILE_TYPES.ROAD}for(let e=0;e<40;e++){let n=Math.floor(Math.random()*MAP_WIDTH),i=Math.floor(Math.random()*MAP_HEIGHT),o=3+Math.floor(Math.random()*5),r=3+Math.floor(Math.random()*5);for(let e=i;e<i+r&&e<MAP_HEIGHT;e++)for(let s=n;s<n+o&&s<MAP_WIDTH;s++)t[e][s]===TILE_TYPES.BUILDING&&(t[e][s]=TILE_TYPES.GRASS)}const e=(e,o=TILE_TYPES.ROAD)=>{let n,i;do{n=Math.floor(Math.random()*MAP_WIDTH),i=Math.floor(Math.random()*MAP_HEIGHT)}while(t[i][n]!==o);return t[i][n]=e,{x:n,y:i}};gameState.hospitals.push(e(TILE_TYPES.HOSPITAL), e(TILE_TYPES.HOSPITAL));for(let t=0;t<3;t++)gameState.stations.push(e(TILE_TYPES.STATION));AUCKLAND_LOCATIONS.landmarks.forEach(n=>{const o=e(TILE_TYPES.LANDMARK,TILE_TYPES.GRASS);gameState.landmarks.push({name:n,...o})});gameState.mapData=t; gameState.maxFleetSize = gameState.stations.length * SLOTS_PER_STATION;}
+    function generateMap(){let t=Array(MAP_HEIGHT).fill(0).map(()=>Array(MAP_WIDTH).fill(TILE_TYPES.BUILDING));for(let e=0;e<4;e++){let n=Math.floor(MAP_HEIGHT/5*(e+1));for(let e=0;e<MAP_WIDTH;e++)t[n][e]=TILE_TYPES.ROAD}for(let e=0;e<6;e++){let n=Math.floor(MAP_WIDTH/7*(e+1));for(let e=0;e<MAP_HEIGHT;e++)t[e][n]=TILE_TYPES.ROAD}for(let e=0;e<40;e++){let n=Math.floor(Math.random()*MAP_WIDTH),i=Math.floor(Math.random()*MAP_HEIGHT),o=3+Math.floor(Math.random()*5),r=3+Math.floor(Math.random()*5);for(let e=i;e<i+r&&e<MAP_HEIGHT;e++)for(let s=n;s<n+o&&s<MAP_WIDTH;s++)t[e][s]===TILE_TYPES.BUILDING&&(t[e][s]=TILE_TYPES.GRASS)}const e=(e,o=TILE_TYPES.ROAD)=>{let n,i;do{n=Math.floor(Math.random()*MAP_WIDTH),i=Math.floor(Math.random()*MAP_HEIGHT)}while(t[i][n]!==o);return t[i][n]=e,{x:n,y:i}};gameState.hospitals.push(e(TILE_TYPES.HOSPITAL), e(TILE_TYPES.HOSPITAL));for(let t=0;t<3;t++)gameState.stations.push(e(TILE_TYPES.STATION));AUCKLAND_LOCATIONS.landmarks.forEach(n=>{const o=e(TILE_TYPES.LANDMARK,TILE_TYPES.GRASS);gameState.landmarks.push({name:n,...o})});gameState.mapData=t;}
 
     // --- GAME LOGIC ---
     function init() {
@@ -351,7 +345,6 @@
         elements.buyRrvBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); buyUnit('RRV'); });
         elements.buyPtsBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); buyUnit('PATIENT_TRANSFER'); });
         elements.buyHelicopterBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); buyUnit('HELICOPTER'); });
-        elements.buildStationBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); buildStation(); });
         elements.dispatchModal.cancelBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); hideDispatchModal(); });
         elements.dispatchModal.confirmBtn.addEventListener('click', () => confirmDispatch());
         elements.muteBtn.addEventListener('click', toggleMute);
@@ -407,44 +400,11 @@
     }
     
     function buyUnit(type) {
-        if (gameState.units.length >= gameState.maxFleetSize) {
-            alert("Fleet capacity reached! Build another station to increase capacity.");
-            return;
-        }
         const cost = UNIT_COST[type];
         if (gameState.points >= cost) {
             gameState.points -= cost;
             const station = gameState.stations[Math.floor(Math.random() * gameState.stations.length)];
             createUnit(type, station);
-        }
-    }
-
-    function buildStation() {
-        const cost = UNIT_COST.STATION;
-        if (gameState.points >= cost) {
-            gameState.points -= cost;
-            let x, y;
-            let attempts = 0;
-            let placed = false;
-            while(attempts < 200 && !placed) {
-                x = Math.floor(Math.random() * (MAP_WIDTH - 2)) + 1;
-                y = Math.floor(Math.random() * (MAP_HEIGHT - 2)) + 1;
-                if (gameState.mapData[y][x] === TILE_TYPES.ROAD) {
-                    let tooClose = gameState.stations.some(s => heuristic({x,y}, s) < 10);
-                    if (!tooClose) {
-                        placed = true;
-                        gameState.mapData[y][x] = TILE_TYPES.STATION;
-                        gameState.stations.push({x, y});
-                        gameState.maxFleetSize += SLOTS_PER_STATION;
-                        window.forceMapRender = true;
-                    }
-                }
-                attempts++;
-            }
-            if (!placed) {
-                alert("Could not find a suitable location for a new station! Try again later.");
-                gameState.points += cost;
-            }
         }
     }
 
@@ -657,6 +617,7 @@
 
     // --- UI LOGIC ---
     function updateUI() {
+        renderBaseMap();
         renderMapOverlay();
         updateStats();
         updateIncidentList();
@@ -729,15 +690,12 @@
         elements.rrvCount.textContent = unitCounts.RRV || 0;
         elements.ptsCount.textContent = unitCounts.PATIENT_TRANSFER || 0;
         elements.helicopterCount.textContent = unitCounts.HELICOPTER || 0;
-        elements.fleetCapacity.textContent = `${gameState.units.length} / ${gameState.maxFleetSize}`;
     }
     
-    // BUG FIX: Switched to intelligent DOM updates instead of full redraw
     function updateIncidentList() {
         const incidentIdsInDom = new Set([...elements.incidentList.children].map(child => parseInt(child.dataset.incidentId)));
         const incidentIdsInState = new Set(gameState.incidents.map(i => i.id));
 
-        // Remove stale cards
         for (const card of [...elements.incidentList.children]) {
             const cardId = parseInt(card.dataset.incidentId);
             if (!incidentIdsInState.has(cardId)) {
@@ -745,7 +703,6 @@
             }
         }
 
-        // Update existing and add new cards
         gameState.incidents.forEach(incident => {
             let card = elements.incidentList.querySelector(`[data-incident-id='${incident.id}']`);
             if (!card) {
@@ -766,16 +723,18 @@
 
     function getIncidentCardHTML(incident) {
         return `
-            <div class="flex justify-between items-start">
-                <h4 class="font-bold text-sm">${incident.name} #${incident.id}</h4>
-                <span class="text-xs font-mono base-points">${incident.basePoints} Pts</span>
+            <div class="p-2 rounded-lg bg-gray-700 border-l-4">
+                <div class="flex justify-between items-start">
+                    <h4 class="font-bold text-sm">${incident.name} #${incident.id}</h4>
+                    <span class="text-xs font-mono base-points">${incident.basePoints} Pts</span>
+                </div>
+                <div class="text-xs text-gray-300 mt-1 location">${incident.location}</div>
+                <div class="text-xs text-gray-300 mt-1 details"></div>
+                <div class="w-full progress-bar mt-2 h-2 health-bar" style="display: ${incident.conditionDecay > 0 ? 'block' : 'none'}"><div class="progress-bar-inner"></div></div>
+                <button data-incident-id="${incident.id}" class="assign-unit-btn w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">
+                    Assign Unit(s)
+                </button>
             </div>
-            <div class="text-xs text-gray-300 mt-1 location">${incident.location}</div>
-            <div class="text-xs text-gray-300 mt-1 details"></div>
-            <div class="w-full progress-bar mt-2 h-2 health-bar" style="display: ${incident.conditionDecay > 0 ? 'block' : 'none'}"><div class="progress-bar-inner"></div></div>
-            <button data-incident-id="${incident.id}" class="assign-unit-btn w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed">
-                Assign Unit(s)
-            </button>
         `;
     }
 
@@ -804,6 +763,8 @@
         }
         
         card.querySelector('.assign-unit-btn').disabled = Object.keys(incident.assignedUnits).length > 0;
+        const severityColor = { 'Critical': 'border-red-500', 'Serious': 'border-yellow-500', 'Moderate': 'border-blue-400', 'Minor': 'border-green-400'}[incident.severity];
+        card.className = `p-2 rounded-lg bg-gray-700 border-l-4 ${severityColor}`;
     }
 
     function updateUnitList() {
@@ -845,12 +806,10 @@
     }
 
     function updateCommandCenter() {
-        const isFleetFull = gameState.units.length >= gameState.maxFleetSize;
-        elements.buyAmbulanceBtn.disabled = gameState.points < UNIT_COST.AMBULANCE || isFleetFull;
-        elements.buyRrvBtn.disabled = gameState.points < UNIT_COST.RRV || isFleetFull;
-        elements.buyPtsBtn.disabled = gameState.points < UNIT_COST.PATIENT_TRANSFER || isFleetFull;
-        elements.buyHelicopterBtn.disabled = gameState.points < UNIT_COST.HELICOPTER || isFleetFull;
-        elements.buildStationBtn.disabled = gameState.points < UNIT_COST.STATION;
+        elements.buyAmbulanceBtn.disabled = gameState.points < UNIT_COST.AMBULANCE;
+        elements.buyRrvBtn.disabled = gameState.points < UNIT_COST.RRV;
+        elements.buyPtsBtn.disabled = gameState.points < UNIT_COST.PATIENT_TRANSFER;
+        elements.buyHelicopterBtn.disabled = gameState.points < UNIT_COST.HELICOPTER;
     }
     
     function openDispatchModal(incidentId) {
