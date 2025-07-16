@@ -75,7 +75,6 @@
     <main class="container mx-auto p-2 lg:p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         <div class="lg:col-span-1 flex flex-col gap-4">
-            <!-- BUG FIX: Removed 'flex-1' from both panel containers to prevent unwanted stretching -->
             <div class="bg-gray-800 rounded-lg shadow-md flex flex-col h-80">
                 <h2 class="text-base font-bold p-3 bg-gray-700 rounded-t-lg">111 Emergency Incidents</h2>
                 <div id="incident-list" class="p-2 space-y-2 overflow-y-auto custom-scrollbar flex-1"></div>
@@ -550,7 +549,7 @@
                 <div class="text-xs text-gray-300 mt-1">${incident.location}</div>
                 <div class="text-xs text-gray-300 mt-1">Requires: ${reqText} | <span class="${statusColor}">${statusText}</span></div>
                 ${incident.conditionDecay > 0 ? `<div class="w-full health-bar mt-2 h-2"><div class="health-bar-inner ${healthColor}" style="width: ${incident.patientCondition}%"></div></div>` : ''}
-                <button onclick="openDispatchModal(${incident.id})" class="w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" ${Object.keys(incident.assignedUnits).length > 0 ? 'disabled' : ''}>
+                <button onclick="event.stopPropagation(); openDispatchModal(${incident.id})" class="w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" ${Object.keys(incident.assignedUnits).length > 0 ? 'disabled' : ''}>
                     Assign Unit(s)
                 </button>
             `;
