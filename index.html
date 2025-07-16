@@ -277,6 +277,15 @@
         elements.muteBtn.addEventListener('click', toggleMute);
         window.addEventListener('resize', handleResize);
         
+        // BUG FIX: Use event delegation for incident list clicks
+        elements.incidentList.addEventListener('click', (event) => {
+            const button = event.target.closest('.assign-unit-btn');
+            if (button) {
+                const incidentId = parseInt(button.dataset.incidentId, 10);
+                openDispatchModal(incidentId);
+            }
+        });
+
         handleResize();
         updateUI();
     }
@@ -541,6 +550,7 @@
             const statusColor = incident.transporting ? 'text-blue-400' : incident.stabilized ? 'text-green-400' : 'text-yellow-400';
             const healthColor = incident.patientCondition > 60 ? 'bg-green-500' : incident.patientCondition > 30 ? 'bg-yellow-500' : 'bg-red-500';
 
+            // BUG FIX: Removed inline onclick and added data-attribute and class for event delegation
             card.innerHTML = `
                 <div class="flex justify-between items-start">
                     <h4 class="font-bold text-sm">${incident.name} #${incident.id}</h4>
@@ -549,7 +559,7 @@
                 <div class="text-xs text-gray-300 mt-1">${incident.location}</div>
                 <div class="text-xs text-gray-300 mt-1">Requires: ${reqText} | <span class="${statusColor}">${statusText}</span></div>
                 ${incident.conditionDecay > 0 ? `<div class="w-full health-bar mt-2 h-2"><div class="health-bar-inner ${healthColor}" style="width: ${incident.patientCondition}%"></div></div>` : ''}
-                <button onclick="event.stopPropagation(); openDispatchModal(${incident.id})" class="w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" ${Object.keys(incident.assignedUnits).length > 0 ? 'disabled' : ''}>
+                <button data-incident-id="${incident.id}" class="assign-unit-btn w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" ${Object.keys(incident.assignedUnits).length > 0 ? 'disabled' : ''}>
                     Assign Unit(s)
                 </button>
             `;
