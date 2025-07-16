@@ -39,8 +39,10 @@
             display: flex; align-items: center; justify-content: center;
             font-size: var(--icon-size);
             z-index: 10;
+            /* BUG FIX: Center larger icons over their tile */
+            transform: translate(-15%, -15%);
         }
-        .incident-icon { animation: pulse 1.5s infinite; z-index: 20; }
+        .incident-icon { animation: pulse 1.5s infinite; z-index: 20; transform: translate(0, 0); } /* Reset transform for incident icons */
         @keyframes pulse { 
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.4); opacity: 0.7; }
@@ -133,29 +135,19 @@
     const sounds = {
         isMuted: false,
         uiClick: new Tone.MembraneSynth({ volume: -20 }).toDestination(),
-        incidentAlert: new Tone.Synth({
-            oscillator: { type: "sine" },
-            envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.5 },
-            volume: -10
-        }).toDestination(),
-        siren: new Tone.AMSynth({
-            harmonicity: 1.2,
-            oscillator: { type: "fmsine" },
-            envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.2 },
-            modulation: { type: "square" },
-            modulationEnvelope: { attack: 0.01, decay: 0.5, sustain: 1, release: 0.1 },
-            volume: -15
-        }).toDestination(),
-        incidentResolved: new Tone.Synth({
-            oscillator: { type: "triangle" },
-            envelope: { attack: 0.01, decay: 0.1, sustain: 0.05, release: 0.2 },
-            volume: -10
-        }).toDestination(),
+        incidentAlert: new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.5 }, volume: -10 }).toDestination(),
+        siren: new Tone.AMSynth({ harmonicity: 1.2, oscillator: { type: "fmsine" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.2 }, modulation: { type: "square" }, modulationEnvelope: { attack: 0.01, decay: 0.5, sustain: 1, release: 0.1 }, volume: -15 }).toDestination(),
+        incidentResolved: new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.05, release: 0.2 }, volume: -10 }).toDestination(),
+        incidentFailed: new Tone.NoiseSynth({ noise: { type: 'brown' }, envelope: { attack: 0.01, decay: 0.3, sustain: 0 }, volume: -5 }).toDestination(),
     };
 
     function playSound(sound, note, duration, time) {
         if (!sounds.isMuted) {
-            sound.triggerAttackRelease(note, duration, time);
+            if (sound.triggerAttackRelease) {
+                sound.triggerAttackRelease(note, duration, time);
+            } else { // For synths like NoiseSynth
+                sound.triggerAttackRelease(duration, time);
+            }
         }
     }
 
@@ -172,7 +164,7 @@
     const MAP_HEIGHT = 40;
     const GAME_TICK_SPEED = 500;
     const CALL_INTERVAL = 18000;
-    const WEATHER_CHANGE_INTERVAL = 90000;
+    const WEATHER_CHANGE_INTERVAL = 45000;
     const UNIT_COST = { AMBULANCE: 1000, RRV: 750, PATIENT_TRANSFER: 500 };
     const FATIGUE_PER_JOB = 20;
     const FATIGUE_RECOVERY_RATE = 2;
@@ -238,14 +230,14 @@
         streets: ["Queen St", "K' Road", "Great South Rd", "Dominion Rd", "Lincoln Rd", "Tamaki Dr", "Manukau Rd", "East Coast Rd", "Hobson St", "Symonds St", "Tī Rakau Dr", "Fanshawe St"]
     };
     const INCIDENT_TYPES = [
-        { name: 'Cardiac Arrest', severity: 'Critical', basePoints: 200, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 8, conditionDecay: 1.5 },
-        { name: 'Motorway Crash (SH1)', severity: 'Critical', basePoints: 250, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 10, conditionDecay: 1.2 },
-        { name: 'Fall from height (Construction Site)', severity: 'Serious', basePoints: 180, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 9, conditionDecay: 1.0 },
-        { name: 'Assault', severity: 'Serious', basePoints: 150, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 1.0 },
-        { name: 'Sports Injury (Rugby)', severity: 'Moderate', basePoints: 80, req: { AMBULANCE: 1 }, onSceneTime: 5, conditionDecay: 0.5 },
-        { name: 'Breathing Problems', severity: 'Serious', basePoints: 120, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 0.8 },
-        { name: 'Major Incident (Train Derailment)', severity: 'Critical', basePoints: 500, req: { AMBULANCE: 3, RRV: 2 }, onSceneTime: 15, conditionDecay: 2.0 },
-        { name: 'Patient Transfer', severity: 'Minor', basePoints: 40, req: { PATIENT_TRANSFER: 1 }, onSceneTime: 5, conditionDecay: 0 },
+        { name: 'Cardiac Arrest', severity: 'Critical', basePoints: 350, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 8, conditionDecay: 1.5 },
+        { name: 'Motorway Crash (SH1)', severity: 'Critical', basePoints: 400, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 10, conditionDecay: 1.2 },
+        { name: 'Fall from height (Construction Site)', severity: 'Serious', basePoints: 300, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 9, conditionDecay: 1.0 },
+        { name: 'Assault', severity: 'Serious', basePoints: 250, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 1.0 },
+        { name: 'Sports Injury (Rugby)', severity: 'Moderate', basePoints: 150, req: { AMBULANCE: 1 }, onSceneTime: 5, conditionDecay: 0.5 },
+        { name: 'Breathing Problems', severity: 'Serious', basePoints: 200, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 0.8 },
+        { name: 'Major Incident (Train Derailment)', severity: 'Critical', basePoints: 800, req: { AMBULANCE: 3, RRV: 2 }, onSceneTime: 15, conditionDecay: 2.0 },
+        { name: 'Patient Transfer', severity: 'Minor', basePoints: 75, req: { PATIENT_TRANSFER: 1 }, onSceneTime: 5, conditionDecay: 0 },
     ];
     
     // --- A* PATHFINDING (Minified) ---
@@ -277,7 +269,6 @@
         elements.muteBtn.addEventListener('click', toggleMute);
         window.addEventListener('resize', handleResize);
         
-        // BUG FIX: Use event delegation for incident list clicks
         elements.incidentList.addEventListener('click', (event) => {
             const button = event.target.closest('.assign-unit-btn');
             if (button) {
@@ -419,6 +410,7 @@
     }
 
     function updateIncidents() {
+        // Process active incidents
         gameState.incidents.forEach(incident => {
             if (incident.stabilized) return;
             if(incident.unitsOnScene.length === 0) {
@@ -452,6 +444,8 @@
                 }
             }
         });
+
+        // Handle resolved incidents
         const resolved = gameState.incidents.filter(i => i.transporting && gameState.units.find(u => u.incidentId === i.id)?.status === UNIT_STATUS.AT_HOSPITAL);
         resolved.forEach(i => {
             const pointsGained = Math.round(i.basePoints * (i.patientCondition / 100));
@@ -462,7 +456,17 @@
             playSound(sounds.incidentResolved, "E5", "16n", now + 0.1);
             playSound(sounds.incidentResolved, "G5", "16n", now + 0.2);
         });
-        gameState.incidents = gameState.incidents.filter(i => !resolved.includes(i) && i.patientCondition > 0);
+
+        // NEW: Handle failed incidents (penalty)
+        const failed = gameState.incidents.filter(i => i.patientCondition <= 0);
+        failed.forEach(i => {
+            const penalty = Math.round(i.basePoints / 2);
+            gameState.points = Math.max(0, gameState.points - penalty); // Don't go below zero
+            playSound(sounds.incidentFailed, 'C4', '4n');
+        });
+
+        // Clean up incidents list
+        gameState.incidents = gameState.incidents.filter(i => !resolved.includes(i) && !failed.includes(i));
     }
     
     function findClosest(start, targets) {
@@ -550,7 +554,6 @@
             const statusColor = incident.transporting ? 'text-blue-400' : incident.stabilized ? 'text-green-400' : 'text-yellow-400';
             const healthColor = incident.patientCondition > 60 ? 'bg-green-500' : incident.patientCondition > 30 ? 'bg-yellow-500' : 'bg-red-500';
 
-            // BUG FIX: Removed inline onclick and added data-attribute and class for event delegation
             card.innerHTML = `
                 <div class="flex justify-between items-start">
                     <h4 class="font-bold text-sm">${incident.name} #${incident.id}</h4>
@@ -574,6 +577,7 @@
             const div = document.createElement('div');
             div.className = 'bg-gray-700 p-2 rounded-md';
             const fatigueColor = unit.fatigue > 80 ? 'text-red-500' : unit.fatigue > 50 ? 'text-yellow-500' : 'text-gray-300';
+            // BUG FIX: Changed 'u.type' to 'unit.type'
             const icon = unit.type === 'AMBULANCE' ? '🚑' : (unit.type === 'RRV' ? '🚗' : '🚐');
             let actionButton = '';
             if (unit.status === UNIT_STATUS.AVAILABLE || unit.status === UNIT_STATUS.TIRED) {
@@ -682,7 +686,7 @@
         renderBaseMap();
         const tileSize = elements.mapContainer.clientWidth / MAP_WIDTH;
         document.documentElement.style.setProperty('--tile-size', `${tileSize}px`);
-        document.documentElement.style.setProperty('--icon-size', `${tileSize * 0.9}px`);
+        document.documentElement.style.setProperty('--icon-size', `${tileSize * 1.5}px`);
     }
 
     // --- START GAME ---
