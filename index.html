@@ -63,7 +63,6 @@
         <div class="container mx-auto flex justify-between items-center flex-wrap gap-2">
             <h1 class="text-lg md:text-xl font-bold text-green-400">Hato Hone St John: Auckland Dispatch</h1>
             <div class="flex items-center space-x-3 sm:space-x-4 text-xs sm:text-sm">
-                <!-- NEW: Unit Counts -->
                 <div title="Ambulances">🚑 <span id="ambulance-count">0</span></div>
                 <div title="Rapid Response Vehicles">🚗 <span id="rrv-count">0</span></div>
                 <div title="Patient Transfer Vans">🚐 <span id="pts-count">0</span></div>
@@ -147,10 +146,11 @@
 
     function playSound(sound, note, duration, time) {
         if (!sounds.isMuted) {
-            if (sound.triggerAttackRelease) {
-                sound.triggerAttackRelease(note, duration, time);
-            } else {
+            // BUG FIX: Correctly handle different synth types
+            if (sound instanceof Tone.NoiseSynth) {
                 sound.triggerAttackRelease(duration, time);
+            } else if (sound.triggerAttackRelease) {
+                sound.triggerAttackRelease(note, duration, time);
             }
         }
     }
@@ -168,7 +168,6 @@
     const MAP_HEIGHT = 40;
     const GAME_TICK_SPEED = 500;
     const CALL_INTERVAL = 18000;
-    // CHANGE: More frequent weather changes (2 minutes)
     const WEATHER_CHANGE_INTERVAL = 120000;
     const UNIT_COST = { AMBULANCE: 1000, RRV: 750, PATIENT_TRANSFER: 500 };
     const FATIGUE_PER_JOB = 20;
@@ -199,7 +198,6 @@
         startModal: document.getElementById('start-modal'),
         startGameBtn: document.getElementById('start-game-btn'),
         muteBtn: document.getElementById('mute-btn'),
-        // NEW: Unit count spans
         ambulanceCount: document.getElementById('ambulance-count'),
         rrvCount: document.getElementById('rrv-count'),
         ptsCount: document.getElementById('pts-count'),
@@ -363,6 +361,7 @@
             assignedUnits: {}, unitsOnScene: [],
             stabilized: false, transporting: false,
             patientCondition: 100,
+            isFailed: false,
         });
     }
 
@@ -467,11 +466,12 @@
         });
 
         // Handle failed incidents (penalty)
-        const failed = gameState.incidents.filter(i => i.patientCondition <= 0);
+        const failed = gameState.incidents.filter(i => i.patientCondition <= 0 && !i.isFailed);
         failed.forEach(i => {
+            i.isFailed = true; // Mark as failed to prevent reprocessing
             const penalty = Math.round(i.basePoints / 2);
             gameState.points = Math.max(0, gameState.points - penalty);
-            playSound(sounds.incidentFailed, 'C4', '4n');
+            playSound(sounds.incidentFailed, null, '0.3s');
         });
 
         // Clean up incidents list
@@ -550,7 +550,6 @@
         elements.weatherText.textContent = gameState.weather;
         elements.weatherIcon.className = `fa-solid ${gameState.weather === 'RAIN' ? 'fa-cloud-showers-heavy text-blue-400' : 'fa-sun text-yellow-400'}`;
 
-        // NEW: Update unit counts
         const unitCounts = gameState.units.reduce((acc, unit) => {
             acc[unit.type] = (acc[unit.type] || 0) + 1;
             return acc;
