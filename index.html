@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hato Hone St John: Auckland Dispatch</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+        }
+        .map-container {
+            display: grid;
+            grid-template-columns: repeat(var(--map-width), 1fr);
+            grid-template-rows: repeat(var(--map-height), 1fr);
+            width: 100%;
+            aspect-ratio: var(--map-width) / var(--map-height);
+            background-color: #1f2937;
+            max-width: 100%;
+        }
+        .map-tile { width: 100%; height: 100%; }
+        .tile-road { background-color: #4b5563; }
+        .tile-building { background-color: #6b7280; }
+        .tile-grass { background-color: #166534; }
+        .tile-water { background-color: #2563eb; }
+        .tile-hospital { background-color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: bold; color: white; }
+        .tile-station { background-color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: bold; color: white; }
+
+        .map-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .map-icon {
+            position: absolute;
+            width: var(--tile-size);
+            height: var(--tile-size);
+            transition: all 0.4s linear;
+            display: flex; align-items: center; justify-content: center;
+            font-size: var(--icon-size);
+            z-index: 10;
+        }
+        .incident-icon { animation: pulse 1.5s infinite; z-index: 20; }
+        @keyframes pulse { 
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.7; }
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        .health-bar { background-color: #4b5563; border-radius: 999px; overflow: hidden; }
+        .health-bar-inner { height: 100%; border-radius: 999px; transition: width 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white text-sm sm:text-base">
+
+    <!-- Header -->
+    <header class="bg-gray-800 p-3 shadow-lg z-30 sticky top-0">
+        <div class="container mx-auto flex justify-between items-center flex-wrap gap-2">
+            <h1 class="text-lg md:text-xl font-bold text-green-400">Hato Hone St John: Auckland Dispatch</h1>
+            <div class="flex items-center space-x-3 sm:space-x-6 text-xs sm:text-sm">
+                <div title="Current Weather"><i id="weather-icon" class="fa-solid fa-sun text-yellow-400"></i> <span id="weather-text">Clear</span></div>
+                <div><i class="fa-solid fa-clock"></i> <span id="game-time">Day 1 - 00:00</span></div>
+                <div><i class="fa-solid fa-star"></i> <span id="points">2000</span></div>
+                <div><i class="fa-solid fa-check-circle"></i> <span id="resolved-incidents">0</span></div>
+                <button id="mute-btn" title="Mute/Unmute Sound" class="text-lg"><i class="fa-solid fa-volume-high"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="container mx-auto p-2 lg:p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        
+        <div class="lg:col-span-1 flex flex-col gap-4">
+            <div class="bg-gray-800 rounded-lg shadow-md flex-1 flex flex-col h-80">
+                <h2 class="text-base font-bold p-3 bg-gray-700 rounded-t-lg">111 Emergency Incidents</h2>
+                <div id="incident-list" class="p-2 space-y-2 overflow-y-auto custom-scrollbar flex-1"></div>
+            </div>
+            <div class="bg-gray-800 rounded-lg shadow-md flex-1 flex flex-col h-80">
+                <h2 class="text-base font-bold p-3 bg-gray-700 rounded-t-lg">Our Fleet</h2>
+                <div id="unit-list" class="p-2 space-y-2 overflow-y-auto custom-scrollbar flex-1"></div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-2 flex flex-col gap-4">
+            <div class="bg-gray-800 rounded-lg shadow-md p-2 flex-1 relative">
+                <div id="map-container" class="map-container rounded-md"></div>
+                <div id="map-overlay" class="map-overlay"></div>
+            </div>
+            <div class="bg-gray-800 rounded-lg shadow-md p-3">
+                <h3 class="text-base font-bold mb-3 text-center">Fleet Command</h3>
+                <div class="flex justify-center items-center gap-2 sm:gap-4 flex-wrap">
+                    <button id="buy-ambulance-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">
+                        Add Ambulance (1000 Pts)
+                    </button>
+                    <button id="buy-rrv-btn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">
+                        Add RRV (750 Pts)
+                    </button>
+                    <button id="buy-pts-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed text-xs sm:text-sm">
+                        Add PTS Van (500 Pts)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Dispatch Modal -->
+    <div id="dispatch-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 max-w-md w-full">
+            <h3 id="dispatch-modal-title" class="text-xl font-bold mb-4">Assign Unit(s)</h3>
+            <div id="dispatch-options" class="space-y-3"></div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button id="dispatch-cancel-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+                <button id="dispatch-confirm-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Confirm Dispatch</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Start Game Modal -->
+    <div id="start-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-8 max-w-lg w-full text-center">
+            <h3 class="text-3xl font-bold mb-4 text-green-400">Welcome to Auckland Dispatch</h3>
+            <p class="mb-6 text-gray-300">You are in command of the Hato Hone St John fleet for the Tāmaki Makaurau region. Your shift is about to begin. Respond to 111 calls, manage your units, and save lives. Good luck.</p>
+            <button id="start-game-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-xl transition-transform hover:scale-105">Start Shift</button>
+        </div>
+    </div>
+
+    <script>
+    // --- AUDIO SETUP ---
+    const sounds = {
+        isMuted: false,
+        uiClick: new Tone.MembraneSynth({ volume: -20 }).toDestination(),
+        incidentAlert: new Tone.Synth({
+            oscillator: { type: "sine" },
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.5 },
+            volume: -10
+        }).toDestination(),
+        siren: new Tone.AMSynth({
+            harmonicity: 1.2,
+            oscillator: { type: "fmsine" },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.2 },
+            modulation: { type: "square" },
+            modulationEnvelope: { attack: 0.01, decay: 0.5, sustain: 1, release: 0.1 },
+            volume: -15
+        }).toDestination(),
+        incidentResolved: new Tone.Synth({
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.05, release: 0.2 },
+            volume: -10
+        }).toDestination(),
+    };
+
+    function playSound(sound, note, duration) {
+        if (!sounds.isMuted) {
+            sound.triggerAttackRelease(note, duration);
+        }
+    }
+
+    function playSiren() {
+        if (!sounds.isMuted) {
+            const now = Tone.now();
+            sounds.siren.triggerAttackRelease("A5", "8n", now);
+            sounds.siren.triggerAttackRelease("E6", "8n", now + 0.3);
+        }
+    }
+
+    // --- GAME CONFIG ---
+    const MAP_WIDTH = 50;
+    const MAP_HEIGHT = 40;
+    const GAME_TICK_SPEED = 500;
+    const CALL_INTERVAL = 18000;
+    const WEATHER_CHANGE_INTERVAL = 90000;
+    const UNIT_COST = { AMBULANCE: 1000, RRV: 750, PATIENT_TRANSFER: 500 };
+    const FATIGUE_PER_JOB = 20;
+    const FATIGUE_RECOVERY_RATE = 2;
+    const PERFORMANCE_PENALTY_TIRED = 1.5;
+
+    // --- DOM ELEMENTS ---
+    const elements = {
+        mapContainer: document.getElementById('map-container'),
+        mapOverlay: document.getElementById('map-overlay'),
+        incidentList: document.getElementById('incident-list'),
+        unitList: document.getElementById('unit-list'),
+        gameTime: document.getElementById('game-time'),
+        points: document.getElementById('points'),
+        resolvedIncidents: document.getElementById('resolved-incidents'),
+        weatherIcon: document.getElementById('weather-icon'),
+        weatherText: document.getElementById('weather-text'),
+        buyAmbulanceBtn: document.getElementById('buy-ambulance-btn'),
+        buyRrvBtn: document.getElementById('buy-rrv-btn'),
+        buyPtsBtn: document.getElementById('buy-pts-btn'),
+        dispatchModal: {
+            modal: document.getElementById('dispatch-modal'),
+            title: document.getElementById('dispatch-modal-title'),
+            options: document.getElementById('dispatch-options'),
+            cancelBtn: document.getElementById('dispatch-cancel-btn'),
+            confirmBtn: document.getElementById('dispatch-confirm-btn'),
+        },
+        startModal: document.getElementById('start-modal'),
+        startGameBtn: document.getElementById('start-game-btn'),
+        muteBtn: document.getElementById('mute-btn'),
+    };
+
+    // --- GAME STATE ---
+    let gameState = {
+        time: 0,
+        points: 2000,
+        resolvedCount: 0,
+        incidents: [],
+        units: [],
+        mapData: [],
+        hospitals: [],
+        stations: [],
+        nextIds: { incident: 1, unit: 1 },
+        gameRunning: false,
+        activeDispatch: { incidentId: null, assignments: {} },
+        weather: 'CLEAR',
+    };
+
+    // --- ENUMS & CONSTANTS ---
+    const TILE_TYPES = { ROAD: 0, BUILDING: 1, GRASS: 2, WATER: 3, HOSPITAL: 4, STATION: 5 };
+    const UNIT_STATUS = {
+        AVAILABLE: 'Available',
+        DISPATCHED: 'Dispatched',
+        AT_SCENE: 'On Scene',
+        STABILIZING: 'Stabilizing',
+        TRANSPORTING: 'Transporting',
+        AT_HOSPITAL: 'At Hospital',
+        RETURNING: 'Returning to Station',
+        RESTING: 'Resting',
+        TIRED: 'Tired (Available)',
+    };
+    const AUCKLAND_LOCATIONS = {
+        suburbs: ["CBD", "Ponsonby", "Newmarket", "Parnell", "Remuera", "Mt Eden", "Manukau", "Henderson", "Albany", "Takapuna", "Howick", "Papatoetoe", "Glen Innes", "Onehunga", "Avondale"],
+        streets: ["Queen St", "K' Road", "Great South Rd", "Dominion Rd", "Lincoln Rd", "Tamaki Dr", "Manukau Rd", "East Coast Rd", "Hobson St", "Symonds St", "Tī Rakau Dr", "Fanshawe St"]
+    };
+    const INCIDENT_TYPES = [
+        { name: 'Cardiac Arrest', severity: 'Critical', basePoints: 200, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 8, conditionDecay: 1.5 },
+        { name: 'Motorway Crash (SH1)', severity: 'Critical', basePoints: 250, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 10, conditionDecay: 1.2 },
+        { name: 'Fall from height (Construction Site)', severity: 'Serious', basePoints: 180, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 9, conditionDecay: 1.0 },
+        { name: 'Assault', severity: 'Serious', basePoints: 150, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 1.0 },
+        { name: 'Sports Injury (Rugby)', severity: 'Moderate', basePoints: 80, req: { AMBULANCE: 1 }, onSceneTime: 5, conditionDecay: 0.5 },
+        { name: 'Breathing Problems', severity: 'Serious', basePoints: 120, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 0.8 },
+        { name: 'Major Incident (Train Derailment)', severity: 'Critical', basePoints: 500, req: { AMBULANCE: 3, RRV: 2 }, onSceneTime: 15, conditionDecay: 2.0 },
+        { name: 'Patient Transfer', severity: 'Minor', basePoints: 40, req: { PATIENT_TRANSFER: 1 }, onSceneTime: 5, conditionDecay: 0 },
+    ];
+    
+    // --- A* PATHFINDING (Minified) ---
+    class PriorityQueue{constructor(){this.elements=[]}enqueue(e,t){this.elements.push({element:e,priority:t}),this.sort()}dequeue(){return this.elements.shift().element}isEmpty(){return 0===this.elements.length}sort(){this.elements.sort((e,t)=>e.priority-t.priority)}}
+    function findPath(t,e,n){const i=new PriorityQueue;i.enqueue(t,0);const o={[`${t.x},${t.y}`]:null},r={[`${t.x},${t.y}`]:0};for(;!i.isEmpty();){const t=i.dequeue();if(t.x===e.x&&t.y===e.y)break;for(const s of function(t,e){const n=[],i=[{x:0,y:1},{x:0,y:-1},{x:1,y:0},{x:-1,y:0}];for(const o of i){const i=t.x+o.x,r=t.y+o.y;i>=0&&i<MAP_WIDTH&&r>=0&&r<MAP_HEIGHT&&(e[r][i]===TILE_TYPES.ROAD||e[r][i]===TILE_TYPES.HOSPITAL||e[r][i]===TILE_TYPES.STATION)&&n.push({x:i,y:r})}return n}(t,n)){const n=r[`${t.x},${t.y}`]+1;(!r.hasOwnProperty(`${s.x},${s.y}`)||n<r[`${s.x},${s.y}`])&&(r[`${s.x},${s.y}`]=n,i.enqueue(s,n+function(t,e){return Math.abs(t.x-e.x)+Math.abs(t.y-e.y)}(e,s)),o[`${s.x},${s.y}`]=t)}}let s=[];let a=e;for(;a.x!==t.x||a.y!==t.y;){if(s.push(a),a=o[`${a.x},${a.y}`],!a)return[];if(s.length > MAP_WIDTH * MAP_HEIGHT) return [];}return s.reverse()}
+    function heuristic(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+
+    // --- MAP GENERATION (Minified) ---
+    function generateMap(){let t=Array(MAP_HEIGHT).fill(0).map(()=>Array(MAP_WIDTH).fill(TILE_TYPES.BUILDING));for(let e=0;e<4;e++){let n=Math.floor(MAP_HEIGHT/5*(e+1));for(let e=0;e<MAP_WIDTH;e++)t[n][e]=TILE_TYPES.ROAD}for(let e=0;e<6;e++){let n=Math.floor(MAP_WIDTH/7*(e+1));for(let e=0;e<MAP_HEIGHT;e++)t[e][n]=TILE_TYPES.ROAD}for(let e=0;e<40;e++){let n=Math.floor(Math.random()*MAP_WIDTH),i=Math.floor(Math.random()*MAP_HEIGHT),o=3+Math.floor(Math.random()*5),r=3+Math.floor(Math.random()*5);for(let e=i;e<i+r&&e<MAP_HEIGHT;e++)for(let s=n;s<n+o&&s<MAP_WIDTH;s++)t[e][s]===TILE_TYPES.BUILDING&&(t[e][s]=TILE_TYPES.GRASS)}const e=e=>{let n,i;do{n=Math.floor(Math.random()*MAP_WIDTH),i=Math.floor(Math.random()*MAP_HEIGHT)}while(t[i][n]!==TILE_TYPES.ROAD);return t[i][n]=e,{x:n,y:i}};gameState.hospitals.push(e(TILE_TYPES.HOSPITAL), e(TILE_TYPES.HOSPITAL));for(let t=0;t<3;t++)gameState.stations.push(e(TILE_TYPES.STATION));gameState.mapData=t}
+
+    // --- GAME LOGIC ---
+    function init() {
+        generateMap();
+        createUnit('AMBULANCE', gameState.stations[0]);
+        createUnit('AMBULANCE', gameState.stations[1]);
+        createUnit('RRV', gameState.stations[0]);
+        createUnit('PATIENT_TRANSFER', gameState.stations[2]);
+        
+        document.documentElement.style.setProperty('--map-width', MAP_WIDTH);
+        document.documentElement.style.setProperty('--map-height', MAP_HEIGHT);
+        
+        // Event Listeners
+        elements.startGameBtn.addEventListener('click', startGame);
+        elements.buyAmbulanceBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); buyUnit('AMBULANCE'); });
+        elements.buyRrvBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); buyUnit('RRV'); });
+        elements.buyPtsBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); buyUnit('PATIENT_TRANSFER'); });
+        elements.dispatchModal.cancelBtn.addEventListener('click', () => { playSound(sounds.uiClick, 'C2', '8n'); hideDispatchModal(); });
+        elements.dispatchModal.confirmBtn.addEventListener('click', () => confirmDispatch());
+        elements.muteBtn.addEventListener('click', toggleMute);
+        window.addEventListener('resize', handleResize);
+        
+        handleResize();
+        updateUI();
+    }
+
+    async function startGame() {
+        await Tone.start();
+        console.log("Audio context started");
+        elements.startModal.classList.add('hidden');
+        playSound(sounds.uiClick, 'C3', '8n');
+
+        if (gameState.gameRunning) return;
+        gameState.gameRunning = true;
+        setInterval(gameLoop, GAME_TICK_SPEED);
+        setInterval(generateIncident, CALL_INTERVAL);
+        setInterval(changeWeather, WEATHER_CHANGE_INTERVAL);
+        generateIncident();
+    }
+
+    function gameLoop() {
+        gameState.time++;
+        updateUnits();
+        updateIncidents();
+        updateUI();
+    }
+
+    function createUnit(type, station) {
+        let name = '';
+        if (type === 'AMBULANCE') name = `Ambulance ${gameState.nextIds.unit}`;
+        else if (type === 'RRV') name = `RRV ${gameState.nextIds.unit}`;
+        else if (type === 'PATIENT_TRANSFER') name = `PTS Van ${gameState.nextIds.unit}`;
+        
+        gameState.units.push({
+            id: gameState.nextIds.unit++, type, name,
+            x: station.x, y: station.y, station,
+            status: UNIT_STATUS.AVAILABLE,
+            path: [], incidentId: null, timeOnTask: 0, fatigue: 0,
+        });
+    }
+    
+    function buyUnit(type) {
+        const cost = UNIT_COST[type];
+        if (gameState.points >= cost) {
+            gameState.points -= cost;
+            const station = gameState.stations[Math.floor(Math.random() * gameState.stations.length)];
+            createUnit(type, station);
+        }
+    }
+
+    function changeWeather() {
+        gameState.weather = Math.random() < 0.3 ? 'RAIN' : 'CLEAR';
+    }
+
+    function generateIncident() {
+        let incidentTypePool = [...INCIDENT_TYPES];
+        if (gameState.weather === 'RAIN') {
+            const mva = INCIDENT_TYPES.find(i => i.name.includes('Motorway'));
+            if(mva) incidentTypePool.push(mva, mva);
+        }
+        const type = incidentTypePool[Math.floor(Math.random() * incidentTypePool.length)];
+        let x, y;
+        do {
+            x = Math.floor(Math.random() * MAP_WIDTH);
+            y = Math.floor(Math.random() * MAP_HEIGHT);
+        } while (gameState.mapData[y][x] !== TILE_TYPES.ROAD);
+
+        const street = AUCKLAND_LOCATIONS.streets[Math.floor(Math.random() * AUCKLAND_LOCATIONS.streets.length)];
+        const suburb = AUCKLAND_LOCATIONS.suburbs[Math.floor(Math.random() * AUCKLAND_LOCATIONS.suburbs.length)];
+        const location = `${street}, ${suburb}`;
+        
+        playSound(sounds.incidentAlert, 'G5', '16n');
+
+        gameState.incidents.push({
+            id: gameState.nextIds.incident++, ...type, location,
+            x, y, timeCreated: gameState.time,
+            assignedUnits: {}, unitsOnScene: [],
+            stabilized: false, transporting: false,
+            patientCondition: 100,
+        });
+    }
+
+    function getPerformanceModifier(unit) {
+        let mod = 1.0;
+        if (unit.status === UNIT_STATUS.TIRED) mod *= PERFORMANCE_PENALTY_TIRED;
+        if (gameState.weather === 'RAIN' && unit.path.length > 0) mod *= 1.5;
+        return mod;
+    }
+
+    function updateUnits() {
+        gameState.units.forEach(unit => {
+            const perfMod = getPerformanceModifier(unit);
+            
+            if (unit.path.length > 0) {
+                unit.timeOnTask++;
+                if (unit.timeOnTask >= perfMod) {
+                    unit.timeOnTask = 0;
+                    const nextStep = unit.path.shift();
+                    unit.x = nextStep.x;
+                    unit.y = nextStep.y;
+                    if (unit.path.length === 0) handleArrival(unit);
+                }
+            } else { 
+                if (unit.status === UNIT_STATUS.AT_HOSPITAL) {
+                    unit.timeOnTask++;
+                    if (unit.timeOnTask > 4 * perfMod) { 
+                        unit.status = UNIT_STATUS.RETURNING;
+                        unit.fatigue += FATIGUE_PER_JOB;
+                        if(unit.fatigue >= 100) unit.status = UNIT_STATUS.RESTING;
+                        unit.path = findPath(unit, unit.station, gameState.mapData);
+                    }
+                } else if (unit.status === UNIT_STATUS.RESTING) {
+                    unit.fatigue = Math.max(0, unit.fatigue - FATIGUE_RECOVERY_RATE);
+                    if (unit.fatigue === 0) unit.status = UNIT_STATUS.AVAILABLE;
+                }
+            }
+        });
+    }
+
+    function handleArrival(unit) {
+        const incident = gameState.incidents.find(i => i.id === unit.incidentId);
+        if (unit.status === UNIT_STATUS.DISPATCHED) {
+            unit.status = UNIT_STATUS.AT_SCENE;
+            if(incident) incident.unitsOnScene.push(unit.id);
+        } else if (unit.status === UNIT_STATUS.TRANSPORTING) {
+            unit.status = UNIT_STATUS.AT_HOSPITAL;
+            unit.timeOnTask = 0; 
+        } else if (unit.status === UNIT_STATUS.RETURNING) {
+            unit.incidentId = null;
+            unit.status = unit.fatigue >= 80 ? UNIT_STATUS.TIRED : UNIT_STATUS.AVAILABLE;
+            if (unit.fatigue >= 100) unit.status = UNIT_STATUS.RESTING;
+        }
+    }
+
+    function updateIncidents() {
+        gameState.incidents.forEach(incident => {
+            if (incident.stabilized) return;
+            if(incident.unitsOnScene.length === 0) {
+                 incident.patientCondition = Math.max(0, incident.patientCondition - incident.conditionDecay / (1000 / GAME_TICK_SPEED));
+            }
+            const unitsOnScene = gameState.units.filter(u => incident.unitsOnScene.includes(u.id));
+            if (unitsOnScene.length > 0) {
+                const onSceneCounts = unitsOnScene.reduce((acc, u) => { acc[u.type] = (acc[u.type] || 0) + 1; return acc; }, {});
+                const allRequiredPresent = Object.entries(incident.req).every(([type, count]) => onSceneCounts[type] >= count);
+
+                if (allRequiredPresent) {
+                    unitsOnScene.forEach(u => u.status = UNIT_STATUS.STABILIZING);
+                    incident.timeOnTask = (incident.timeOnTask || 0) + 1;
+                    const slowestUnitMod = Math.max(...unitsOnScene.map(getPerformanceModifier));
+                    if (incident.timeOnTask >= incident.onSceneTime * slowestUnitMod) {
+                        incident.stabilized = true;
+                        unitsOnScene.filter(u => u.type !== 'AMBULANCE' && u.type !== 'PATIENT_TRANSFER').forEach(u => {
+                            u.status = UNIT_STATUS.RETURNING;
+                            u.fatigue += FATIGUE_PER_JOB;
+                            if(u.fatigue >= 100) u.status = UNIT_STATUS.RESTING;
+                            u.path = findPath(u, u.station, gameState.mapData);
+                        });
+                        const transportUnit = unitsOnScene.find(u => u.type === 'AMBULANCE' || u.type === 'PATIENT_TRANSFER');
+                        if (transportUnit) {
+                            transportUnit.status = UNIT_STATUS.TRANSPORTING;
+                            const hospital = findClosest(transportUnit, gameState.hospitals);
+                            transportUnit.path = findPath(transportUnit, hospital, gameState.mapData);
+                            incident.transporting = true;
+                        }
+                    }
+                }
+            }
+        });
+        const resolved = gameState.incidents.filter(i => i.transporting && gameState.units.find(u => u.incidentId === i.id)?.status === UNIT_STATUS.AT_HOSPITAL);
+        resolved.forEach(i => {
+            const pointsGained = Math.round(i.basePoints * (i.patientCondition / 100));
+            gameState.points += pointsGained;
+            gameState.resolvedCount++;
+            const now = Tone.now();
+            playSound(sounds.incidentResolved, "C5", "16n", now);
+            playSound(sounds.incidentResolved, "E5", "16n", now + 0.1);
+            playSound(sounds.incidentResolved, "G5", "16n", now + 0.2);
+        });
+        gameState.incidents = gameState.incidents.filter(i => !resolved.includes(i) && i.patientCondition > 0);
+    }
+    
+    function findClosest(start, targets) {
+        return targets.reduce((closest, target) => {
+            const dist = heuristic(start, target);
+            return dist < closest.dist ? { target, dist } : closest;
+        }, { target: null, dist: Infinity }).target;
+    }
+
+    // --- UI LOGIC ---
+    function updateUI() {
+        renderMapOverlay();
+        updateStats();
+        updateIncidentList();
+        updateUnitList();
+        updateCommandCenter();
+    }
+    
+    function renderBaseMap() {
+        if(elements.mapContainer.children.length > 0 && !window.forceMapRender) return;
+        elements.mapContainer.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+            for (let x = 0; x < MAP_WIDTH; x++) {
+                const tile = document.createElement('div');
+                tile.className = 'map-tile';
+                const type = gameState.mapData[y][x];
+                if(type === TILE_TYPES.ROAD) tile.classList.add('tile-road');
+                else if(type === TILE_TYPES.BUILDING) tile.classList.add('tile-building');
+                else if(type === TILE_TYPES.GRASS) tile.classList.add('tile-grass');
+                else if(type === TILE_TYPES.HOSPITAL) { tile.classList.add('tile-hospital'); tile.textContent = 'H'; }
+                else if(type === TILE_TYPES.STATION) { tile.classList.add('tile-station'); tile.textContent = 'S'; }
+                fragment.appendChild(tile);
+            }
+        }
+        elements.mapContainer.appendChild(fragment);
+        window.forceMapRender = false;
+    }
+    
+    function renderMapOverlay() {
+        elements.mapOverlay.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        gameState.incidents.forEach(i => fragment.appendChild(createMapIcon('🚨', i.x, i.y, `Incident #${i.id}: ${i.name}`, 'incident-icon')));
+        gameState.units.forEach(u => {
+            const icon = u.type === 'AMBULANCE' ? '🚑' : (u.type === 'RRV' ? '🚗' : '🚐');
+            const el = createMapIcon(icon, u.x, u.y, `${u.name} (${u.status})`);
+            if(u.status !== UNIT_STATUS.AVAILABLE && u.status !== UNIT_STATUS.TIRED) el.style.filter = 'drop-shadow(0 0 5px cyan)';
+            if(u.status === UNIT_STATUS.TIRED || u.status === UNIT_STATUS.RESTING) el.style.opacity = '0.6';
+            fragment.appendChild(el);
+        });
+        elements.mapOverlay.appendChild(fragment);
+    }
+    
+    function createMapIcon(icon, x, y, title, extraClass = '') {
+        const el = document.createElement('div');
+        el.className = `map-icon ${extraClass}`;
+        el.style.left = `${x / MAP_WIDTH * 100}%`;
+        el.style.top = `${y / MAP_HEIGHT * 100}%`;
+        el.innerHTML = icon;
+        el.title = title;
+        return el;
+    }
+
+    function updateStats() {
+        const totalMinutes = Math.floor(gameState.time * GAME_TICK_SPEED / 1000 / 60);
+        const day = Math.floor(totalMinutes / (24 * 60)) + 1;
+        const hours = Math.floor(totalMinutes / 60) % 24;
+        const minutes = totalMinutes % 60;
+        elements.gameTime.textContent = `Day ${day} - ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        elements.points.textContent = gameState.points;
+        elements.resolvedIncidents.textContent = gameState.resolvedCount;
+        elements.weatherText.textContent = gameState.weather;
+        elements.weatherIcon.className = `fa-solid ${gameState.weather === 'RAIN' ? 'fa-cloud-showers-heavy text-blue-400' : 'fa-sun text-yellow-400'}`;
+    }
+    
+    function updateIncidentList() {
+        elements.incidentList.innerHTML = gameState.incidents.length === 0 ? `<p class="text-gray-400 text-center p-4">No active incidents.</p>` : '';
+        gameState.incidents.forEach(incident => {
+            const card = document.createElement('div');
+            const severityColor = { 'Critical': 'border-red-500', 'Serious': 'border-yellow-500', 'Moderate': 'border-blue-400', 'Minor': 'border-green-400'}[incident.severity];
+            card.className = `p-2 rounded-lg bg-gray-700 border-l-4 ${severityColor}`;
+            
+            const reqText = Object.entries(incident.req).map(([type, count]) => `${count}x ${type === 'AMBULANCE' ? 'Amb' : (type === 'RRV' ? 'RRV' : 'PTS')}`).join(', ');
+            const statusText = incident.transporting ? 'Transporting' : incident.stabilized ? 'On Scene' : Object.keys(incident.assignedUnits).length > 0 ? 'Dispatched' : 'Awaiting Dispatch';
+            const statusColor = incident.transporting ? 'text-blue-400' : incident.stabilized ? 'text-green-400' : 'text-yellow-400';
+            const healthColor = incident.patientCondition > 60 ? 'bg-green-500' : incident.patientCondition > 30 ? 'bg-yellow-500' : 'bg-red-500';
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <h4 class="font-bold text-sm">${incident.name} #${incident.id}</h4>
+                    <span class="text-xs font-mono">${incident.basePoints} Pts</span>
+                </div>
+                <div class="text-xs text-gray-300 mt-1">${incident.location}</div>
+                <div class="text-xs text-gray-300 mt-1">Requires: ${reqText} | <span class="${statusColor}">${statusText}</span></div>
+                ${incident.conditionDecay > 0 ? `<div class="w-full health-bar mt-2 h-2"><div class="health-bar-inner ${healthColor}" style="width: ${incident.patientCondition}%"></div></div>` : ''}
+                <button onclick="openDispatchModal(${incident.id})" class="w-full mt-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded-lg transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed" ${Object.keys(incident.assignedUnits).length > 0 ? 'disabled' : ''}>
+                    Assign Unit(s)
+                </button>
+            `;
+            elements.incidentList.appendChild(card);
+        });
+    }
+
+    function updateUnitList() {
+        elements.unitList.innerHTML = '';
+        gameState.units.forEach(unit => {
+            const statusColor = unit.status === UNIT_STATUS.AVAILABLE ? 'text-green-400' : (unit.status === UNIT_STATUS.TIRED ? 'text-yellow-500' : (unit.status === UNIT_STATUS.RESTING ? 'text-blue-400' : 'text-orange-400'));
+            const div = document.createElement('div');
+            div.className = 'bg-gray-700 p-2 rounded-md';
+            const fatigueColor = unit.fatigue > 80 ? 'text-red-500' : unit.fatigue > 50 ? 'text-yellow-500' : 'text-gray-300';
+            const icon = unit.type === 'AMBULANCE' ? '🚑' : (unit.type === 'RRV' ? '🚗' : '🚐');
+            let actionButton = '';
+            if (unit.status === UNIT_STATUS.AVAILABLE || unit.status === UNIT_STATUS.TIRED) {
+                actionButton = `<button onclick="sendUnitToRest(${unit.id})" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded-lg">End Shift</button>`;
+            }
+
+            div.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="font-bold">${unit.name} ${icon}</span>
+                    <span class="${statusColor} text-xs">${unit.status}</span>
+                </div>
+                <div class="flex justify-between items-center mt-2">
+                    <div class="text-xs">Fatigue: <span class="${fatigueColor}">${unit.fatigue}%</span></div>
+                    ${actionButton}
+                </div>
+            `;
+            elements.unitList.appendChild(div);
+        });
+    }
+    
+    function sendUnitToRest(unitId) {
+        playSound(sounds.uiClick, 'C2', '8n');
+        const unit = gameState.units.find(u => u.id === unitId);
+        if (unit && (unit.status === UNIT_STATUS.AVAILABLE || unit.status === UNIT_STATUS.TIRED)) {
+            unit.status = UNIT_STATUS.RESTING;
+            unit.path = findPath(unit, unit.station, gameState.mapData);
+        }
+    }
+
+    function updateCommandCenter() {
+        elements.buyAmbulanceBtn.disabled = gameState.points < UNIT_COST.AMBULANCE;
+        elements.buyRrvBtn.disabled = gameState.points < UNIT_COST.RRV;
+        elements.buyPtsBtn.disabled = gameState.points < UNIT_COST.PATIENT_TRANSFER;
+    }
+    
+    function openDispatchModal(incidentId) {
+        playSound(sounds.uiClick, 'C3', '8n');
+        const incident = gameState.incidents.find(i => i.id === incidentId);
+        if (!incident) return;
+        
+        gameState.activeDispatch = { incidentId, assignments: {} };
+        elements.dispatchModal.title.textContent = `Assign to: ${incident.name} #${incident.id}`;
+        elements.dispatchModal.options.innerHTML = '';
+
+        const availableUnits = gameState.units.filter(u => u.status === UNIT_STATUS.AVAILABLE || u.status === UNIT_STATUS.TIRED);
+
+        Object.entries(incident.req).forEach(([type, count]) => {
+            for (let i = 0; i < count; i++) {
+                const select = document.createElement('select');
+                select.className = "w-full p-2 rounded bg-gray-900 text-white border border-gray-600 mt-2";
+                let typeName = type.replace('_', ' ');
+                select.innerHTML = `<option value="">-- Select ${typeName} --</option>`;
+                availableUnits.filter(u => u.type === type).forEach(unit => {
+                    select.innerHTML += `<option value="${unit.id}">${unit.name} (Fatigue: ${unit.fatigue}%)</option>`;
+                });
+                select.onchange = (e) => { gameState.activeDispatch.assignments[`${type}-${i}`] = parseInt(e.target.value); };
+                elements.dispatchModal.options.appendChild(select);
+            }
+        });
+        elements.dispatchModal.modal.classList.remove('hidden');
+    }
+
+    function hideDispatchModal() {
+        elements.dispatchModal.modal.classList.add('hidden');
+    }
+
+    function confirmDispatch() {
+        const { incidentId, assignments } = gameState.activeDispatch;
+        const incident = gameState.incidents.find(i => i.id === incidentId);
+        if (!incident) { hideDispatchModal(); return; }
+
+        const assignedUnitIds = Object.values(assignments).filter(Boolean);
+        if (new Set(assignedUnitIds).size !== assignedUnitIds.length) { alert('Cannot assign the same unit twice!'); return; }
+        if (assignedUnitIds.length < Object.values(incident.req).reduce((a, b) => a + b, 0)) { alert('Please fill all required slots!'); return; }
+
+        assignedUnitIds.forEach(unitId => {
+            const unit = gameState.units.find(u => u.id === unitId);
+            if (unit) {
+                if(unit.type === 'AMBULANCE' || unit.type === 'RRV') {
+                    playSiren();
+                } else {
+                    playSound(sounds.uiClick, 'C3', '8n');
+                }
+                unit.status = UNIT_STATUS.DISPATCHED;
+                unit.incidentId = incidentId;
+                unit.path = findPath(unit, incident, gameState.mapData);
+                incident.assignedUnits[unit.id] = unit.id;
+            }
+        });
+        hideDispatchModal();
+    }
+    
+    function toggleMute() {
+        sounds.isMuted = !sounds.isMuted;
+        Tone.Master.mute = sounds.isMuted;
+        elements.muteBtn.innerHTML = `<i class="fa-solid ${sounds.isMuted ? 'fa-volume-xmark' : 'fa-volume-high'}"></i>`;
+        playSound(sounds.uiClick, 'C2', '8n');
+    }
+
+    function handleResize() {
+        window.forceMapRender = true;
+        renderBaseMap();
+        const tileSize = elements.mapContainer.clientWidth / MAP_WIDTH;
+        document.documentElement.style.setProperty('--tile-size', `${tileSize}px`);
+        document.documentElement.style.setProperty('--icon-size', `${tileSize * 0.9}px`);
+    }
+
+    // --- START GAME ---
+    document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
