@@ -153,9 +153,10 @@
         }).toDestination(),
     };
 
-    function playSound(sound, note, duration) {
+    // BUG FIX: Modified playSound to accept an optional time parameter
+    function playSound(sound, note, duration, time) {
         if (!sounds.isMuted) {
-            sound.triggerAttackRelease(note, duration);
+            sound.triggerAttackRelease(note, duration, time);
         }
     }
 
@@ -638,12 +639,17 @@
         const assignedUnitIds = Object.values(assignments).filter(Boolean);
         if (new Set(assignedUnitIds).size !== assignedUnitIds.length) { alert('Cannot assign the same unit twice!'); return; }
         if (assignedUnitIds.length < Object.values(incident.req).reduce((a, b) => a + b, 0)) { alert('Please fill all required slots!'); return; }
-
+        
+        // BUG FIX: Play siren only once per dispatch action
+        let sirenPlayed = false;
         assignedUnitIds.forEach(unitId => {
             const unit = gameState.units.find(u => u.id === unitId);
             if (unit) {
                 if(unit.type === 'AMBULANCE' || unit.type === 'RRV') {
-                    playSiren();
+                    if (!sirenPlayed) {
+                        playSiren();
+                        sirenPlayed = true;
+                    }
                 } else {
                     playSound(sounds.uiClick, 'C3', '8n');
                 }
