@@ -39,10 +39,9 @@
             display: flex; align-items: center; justify-content: center;
             font-size: var(--icon-size);
             z-index: 10;
-            /* BUG FIX: Center larger icons over their tile */
             transform: translate(-15%, -15%);
         }
-        .incident-icon { animation: pulse 1.5s infinite; z-index: 20; transform: translate(0, 0); } /* Reset transform for incident icons */
+        .incident-icon { animation: pulse 1.5s infinite; z-index: 20; transform: translate(0, 0); }
         @keyframes pulse { 
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.4); opacity: 0.7; }
@@ -63,7 +62,12 @@
     <header class="bg-gray-800 p-3 shadow-lg z-30 sticky top-0">
         <div class="container mx-auto flex justify-between items-center flex-wrap gap-2">
             <h1 class="text-lg md:text-xl font-bold text-green-400">Hato Hone St John: Auckland Dispatch</h1>
-            <div class="flex items-center space-x-3 sm:space-x-6 text-xs sm:text-sm">
+            <div class="flex items-center space-x-3 sm:space-x-4 text-xs sm:text-sm">
+                <!-- NEW: Unit Counts -->
+                <div title="Ambulances">🚑 <span id="ambulance-count">0</span></div>
+                <div title="Rapid Response Vehicles">🚗 <span id="rrv-count">0</span></div>
+                <div title="Patient Transfer Vans">🚐 <span id="pts-count">0</span></div>
+                <div class="border-l border-gray-600 h-4"></div>
                 <div title="Current Weather"><i id="weather-icon" class="fa-solid fa-sun text-yellow-400"></i> <span id="weather-text">Clear</span></div>
                 <div><i class="fa-solid fa-clock"></i> <span id="game-time">Day 1 - 00:00</span></div>
                 <div><i class="fa-solid fa-star"></i> <span id="points">2000</span></div>
@@ -145,7 +149,7 @@
         if (!sounds.isMuted) {
             if (sound.triggerAttackRelease) {
                 sound.triggerAttackRelease(note, duration, time);
-            } else { // For synths like NoiseSynth
+            } else {
                 sound.triggerAttackRelease(duration, time);
             }
         }
@@ -164,7 +168,8 @@
     const MAP_HEIGHT = 40;
     const GAME_TICK_SPEED = 500;
     const CALL_INTERVAL = 18000;
-    const WEATHER_CHANGE_INTERVAL = 45000;
+    // CHANGE: More frequent weather changes (2 minutes)
+    const WEATHER_CHANGE_INTERVAL = 120000;
     const UNIT_COST = { AMBULANCE: 1000, RRV: 750, PATIENT_TRANSFER: 500 };
     const FATIGUE_PER_JOB = 20;
     const FATIGUE_RECOVERY_RATE = 2;
@@ -194,6 +199,10 @@
         startModal: document.getElementById('start-modal'),
         startGameBtn: document.getElementById('start-game-btn'),
         muteBtn: document.getElementById('mute-btn'),
+        // NEW: Unit count spans
+        ambulanceCount: document.getElementById('ambulance-count'),
+        rrvCount: document.getElementById('rrv-count'),
+        ptsCount: document.getElementById('pts-count'),
     };
 
     // --- GAME STATE ---
@@ -457,11 +466,11 @@
             playSound(sounds.incidentResolved, "G5", "16n", now + 0.2);
         });
 
-        // NEW: Handle failed incidents (penalty)
+        // Handle failed incidents (penalty)
         const failed = gameState.incidents.filter(i => i.patientCondition <= 0);
         failed.forEach(i => {
             const penalty = Math.round(i.basePoints / 2);
-            gameState.points = Math.max(0, gameState.points - penalty); // Don't go below zero
+            gameState.points = Math.max(0, gameState.points - penalty);
             playSound(sounds.incidentFailed, 'C4', '4n');
         });
 
@@ -540,6 +549,15 @@
         elements.resolvedIncidents.textContent = gameState.resolvedCount;
         elements.weatherText.textContent = gameState.weather;
         elements.weatherIcon.className = `fa-solid ${gameState.weather === 'RAIN' ? 'fa-cloud-showers-heavy text-blue-400' : 'fa-sun text-yellow-400'}`;
+
+        // NEW: Update unit counts
+        const unitCounts = gameState.units.reduce((acc, unit) => {
+            acc[unit.type] = (acc[unit.type] || 0) + 1;
+            return acc;
+        }, {});
+        elements.ambulanceCount.textContent = unitCounts.AMBULANCE || 0;
+        elements.rrvCount.textContent = unitCounts.RRV || 0;
+        elements.ptsCount.textContent = unitCounts.PATIENT_TRANSFER || 0;
     }
     
     function updateIncidentList() {
@@ -577,7 +595,6 @@
             const div = document.createElement('div');
             div.className = 'bg-gray-700 p-2 rounded-md';
             const fatigueColor = unit.fatigue > 80 ? 'text-red-500' : unit.fatigue > 50 ? 'text-yellow-500' : 'text-gray-300';
-            // BUG FIX: Changed 'u.type' to 'unit.type'
             const icon = unit.type === 'AMBULANCE' ? '🚑' : (unit.type === 'RRV' ? '🚗' : '🚐');
             let actionButton = '';
             if (unit.status === UNIT_STATUS.AVAILABLE || unit.status === UNIT_STATUS.TIRED) {
