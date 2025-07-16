@@ -146,7 +146,6 @@
 
     function playSound(sound, note, duration, time) {
         if (!sounds.isMuted) {
-            // BUG FIX: Correctly handle different synth types
             if (sound instanceof Tone.NoiseSynth) {
                 sound.triggerAttackRelease(duration, time);
             } else if (sound.triggerAttackRelease) {
@@ -168,7 +167,7 @@
     const MAP_HEIGHT = 40;
     const GAME_TICK_SPEED = 500;
     const CALL_INTERVAL = 18000;
-    const WEATHER_CHANGE_INTERVAL = 120000;
+    const WEATHER_CHANGE_INTERVAL = 60000; // CHANGE: More frequent weather (1 minute)
     const UNIT_COST = { AMBULANCE: 1000, RRV: 750, PATIENT_TRANSFER: 500 };
     const FATIGUE_PER_JOB = 20;
     const FATIGUE_RECOVERY_RATE = 2;
@@ -237,14 +236,22 @@
         streets: ["Queen St", "K' Road", "Great South Rd", "Dominion Rd", "Lincoln Rd", "Tamaki Dr", "Manukau Rd", "East Coast Rd", "Hobson St", "Symonds St", "Tī Rakau Dr", "Fanshawe St"]
     };
     const INCIDENT_TYPES = [
-        { name: 'Cardiac Arrest', severity: 'Critical', basePoints: 350, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 8, conditionDecay: 1.5 },
-        { name: 'Motorway Crash (SH1)', severity: 'Critical', basePoints: 400, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 10, conditionDecay: 1.2 },
-        { name: 'Fall from height (Construction Site)', severity: 'Serious', basePoints: 300, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 9, conditionDecay: 1.0 },
-        { name: 'Assault', severity: 'Serious', basePoints: 250, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 1.0 },
-        { name: 'Sports Injury (Rugby)', severity: 'Moderate', basePoints: 150, req: { AMBULANCE: 1 }, onSceneTime: 5, conditionDecay: 0.5 },
-        { name: 'Breathing Problems', severity: 'Serious', basePoints: 200, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 0.8 },
-        { name: 'Major Incident (Train Derailment)', severity: 'Critical', basePoints: 800, req: { AMBULANCE: 3, RRV: 2 }, onSceneTime: 15, conditionDecay: 2.0 },
-        { name: 'Patient Transfer', severity: 'Minor', basePoints: 75, req: { PATIENT_TRANSFER: 1 }, onSceneTime: 5, conditionDecay: 0 },
+        { name: 'Cardiac Arrest', severity: 'Critical', basePoints: 525, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 8, conditionDecay: 1.5 },
+        { name: 'Motorway Crash (SH1)', severity: 'Critical', basePoints: 600, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 10, conditionDecay: 1.2 },
+        { name: 'Suspected Meningitis', severity: 'Critical', basePoints: 560, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 9, conditionDecay: 1.4 },
+        { name: 'Severe Allergic Reaction', severity: 'Critical', basePoints: 490, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 7, conditionDecay: 1.6 },
+        { name: 'Fall from height (Construction Site)', severity: 'Serious', basePoints: 450, req: { AMBULANCE: 1, RRV: 1 }, onSceneTime: 9, conditionDecay: 1.0 },
+        { name: 'Assault', severity: 'Serious', basePoints: 375, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 1.0 },
+        { name: 'Chest Pains', severity: 'Serious', basePoints: 340, req: { AMBULANCE: 1 }, onSceneTime: 7, conditionDecay: 0.9 },
+        { name: 'Unconscious Person', severity: 'Serious', basePoints: 410, req: { AMBULANCE: 1 }, onSceneTime: 5, conditionDecay: 1.1 },
+        { name: 'Domestic Incident (Police Standby)', severity: 'Serious', basePoints: 300, req: { AMBULANCE: 1 }, onSceneTime: 10, conditionDecay: 0.4 },
+        { name: 'Breathing Problems', severity: 'Serious', basePoints: 300, req: { AMBULANCE: 1 }, onSceneTime: 6, conditionDecay: 0.8 },
+        { name: 'Sports Injury (Rugby)', severity: 'Moderate', basePoints: 225, req: { AMBULANCE: 1 }, onSceneTime: 5, conditionDecay: 0.5 },
+        { name: 'Hiking Accident (Waitakere Ranges)', severity: 'Moderate', basePoints: 260, req: { AMBULANCE: 1 }, onSceneTime: 8, conditionDecay: 0.6 },
+        { name: 'Food Poisoning', severity: 'Moderate', basePoints: 190, req: { AMBULANCE: 1 }, onSceneTime: 5, conditionDecay: 0.3 },
+        { name: 'Major Incident (Train Derailment)', severity: 'Critical', basePoints: 1200, req: { AMBULANCE: 3, RRV: 2 }, onSceneTime: 15, conditionDecay: 2.0 },
+        { name: 'Patient Transfer', severity: 'Minor', basePoints: 110, req: { PATIENT_TRANSFER: 1 }, onSceneTime: 5, conditionDecay: 0 },
+        { name: 'GP Appointment Transfer', severity: 'Minor', basePoints: 120, req: { PATIENT_TRANSFER: 1 }, onSceneTime: 5, conditionDecay: 0 },
     ];
     
     // --- A* PATHFINDING (Minified) ---
@@ -421,7 +428,8 @@
         // Process active incidents
         gameState.incidents.forEach(incident => {
             if (incident.stabilized) return;
-            if(incident.unitsOnScene.length === 0) {
+            // CHANGE: Countdown stops once dispatched, not on scene
+            if (Object.keys(incident.assignedUnits).length === 0) {
                  incident.patientCondition = Math.max(0, incident.patientCondition - incident.conditionDecay / (1000 / GAME_TICK_SPEED));
             }
             const unitsOnScene = gameState.units.filter(u => incident.unitsOnScene.includes(u.id));
@@ -469,7 +477,8 @@
         const failed = gameState.incidents.filter(i => i.patientCondition <= 0 && !i.isFailed);
         failed.forEach(i => {
             i.isFailed = true; // Mark as failed to prevent reprocessing
-            const penalty = Math.round(i.basePoints / 2);
+            // CHANGE: Penalty is now 25% of base points
+            const penalty = Math.round(i.basePoints * 0.25);
             gameState.points = Math.max(0, gameState.points - penalty);
             playSound(sounds.incidentFailed, null, '0.3s');
         });
